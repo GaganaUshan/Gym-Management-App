@@ -33,10 +33,4 @@ mongoose
     .then(() => console.log('✅ MongoDB connected'))
     .catch((err) => console.error('MongoDB connection error:', err));
 
-if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
-    app.listen(PORT, () => {
-        console.log(`🚀 Server running on port ${PORT}`);
-    });
-}
-
 export default app;
