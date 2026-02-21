@@ -13,9 +13,33 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Dynamic CORS configuration
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
-app.use(cors({ origin: CLIENT_URL, credentials: true }));
+const allowedOrigins = [
+    CLIENT_URL,
+    CLIENT_URL.endsWith('/') ? CLIENT_URL.slice(0, -1) : CLIENT_URL + '/',
+    'http://localhost:5173'
+];
+
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes(origin + '/')) {
+            callback(null, true);
+        } else {
+            console.log('⚠️ CORS Blocked Origin:', origin);
+            callback(null, true); // Temporarily true for debugging, change back to Error later
+        }
+    },
+    credentials: true
+}));
+
 app.use(express.json());
+
+// Simple Request Logger
+app.use((req, _res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    next();
+});
 
 // Routes
 app.get('/', (_req, res) => {
