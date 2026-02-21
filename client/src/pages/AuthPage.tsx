@@ -3,6 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Mail, Lock, User, AlertCircle, Dumbbell, Zap } from 'lucide-react';
 
+function getFirebaseError(code: string): string {
+    switch (code) {
+        case 'auth/email-already-in-use': return 'An account with this email already exists.';
+        case 'auth/invalid-email': return 'Please enter a valid email address.';
+        case 'auth/weak-password': return 'Password must be at least 6 characters.';
+        case 'auth/user-not-found': return 'No account found with this email.';
+        case 'auth/wrong-password': return 'Incorrect password. Please try again.';
+        case 'auth/invalid-credential': return 'Invalid email or password.';
+        case 'auth/too-many-requests': return 'Too many failed attempts. Please try again later.';
+        default: return 'Something went wrong. Please try again.';
+    }
+}
+
 export default function AuthPage() {
     const [isLogin, setIsLogin] = useState(true);
     const [name, setName] = useState('');
@@ -26,7 +39,7 @@ export default function AuthPage() {
             }
             navigate('/dashboard');
         } catch (err: any) {
-            setError(err?.response?.data?.message || 'Something went wrong. Check your connection.');
+            setError(getFirebaseError(err?.code));
         } finally {
             setLoading(false);
         }

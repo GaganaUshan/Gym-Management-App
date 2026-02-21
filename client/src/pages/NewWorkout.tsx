@@ -1,10 +1,21 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, X, ArrowLeft, Save, ChevronDown } from 'lucide-react';
-import api from '../lib/api';
+import { collection, addDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { useAuth } from '../context/AuthContext';
 
 interface ExerciseRow { name: string; sets: number; reps: number; weight: number; }
 const emptyRow = (): ExerciseRow => ({ name: '', sets: 3, reps: 10, weight: 0 });
+
+const EXERCISE_NAMES = [
+    'Barbell Bench Press', 'Pull-Up', 'Squat', 'Deadlift', 'Overhead Press',
+    'Dumbbell Row', 'Incline Dumbbell Press', 'Romanian Deadlift', 'Bicep Curl',
+    'Tricep Dips', 'Leg Press', 'Cable Fly', 'Face Pull', 'Plank',
+    'Hanging Leg Raise', 'Lateral Raise', 'Calf Raise', 'Hip Thrust',
+    'Bulgarian Split Squat', 'Dumbbell Shoulder Press', 'Hammer Curl',
+    'Skull Crusher', 'Cable Row', 'Chest Dips', 'Leg Curl', 'Leg Extension',
+];
 
 const fieldConfig = [
     { key: 'sets' as const, label: 'Sets' },
@@ -14,18 +25,14 @@ const fieldConfig = [
 
 export default function NewWorkout() {
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [name, setName] = useState('');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [duration, setDuration] = useState('');
     const [notes, setNotes] = useState('');
     const [exercises, setExercises] = useState<ExerciseRow[]>([emptyRow()]);
-    const [libraryNames, setLibraryNames] = useState<string[]>([]);
     const [activeDropdown, setActiveDropdown] = useState<number | null>(null);
     const [saving, setSaving] = useState(false);
-
-    useEffect(() => {
-        api.get('/api/exercises').then(r => setLibraryNames(r.data.map((e: any) => e.name)));
-    }, []);
 
     const updateRow = (idx: number, field: keyof ExerciseRow, value: string | number) =>
         setExercises(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r));
@@ -33,9 +40,18 @@ export default function NewWorkout() {
     const handleSave = async () => {
         const valid = exercises.filter(e => e.name.trim());
         if (!valid.length) { alert('Add at least one exercise'); return; }
+        if (!user) return;
         setSaving(true);
         try {
-            await api.post('/api/workouts', { name: name || 'My Workout', date, exercises: valid, durationMinutes: duration ? Number(duration) : undefined, notes });
+            await addDoc(collection(db, 'workouts'), {
+                userId: user.id,
+                name: name || 'My Workout',
+                date,
+                exercises: valid,
+                durationMinutes: duration ? Number(duration) : null,
+                notes: notes || '',
+                createdAt: new Date().toISOString(),
+            });
             navigate('/log');
         } catch { alert('Failed to save workout.'); } finally { setSaving(false); }
     };
@@ -44,7 +60,6 @@ export default function NewWorkout() {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <button onClick={() => navigate(-1)} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text-secondary)', padding: '0.5rem', cursor: 'pointer', display: 'flex' }}>
                     <ArrowLeft size={17} />
@@ -52,7 +67,6 @@ export default function NewWorkout() {
                 <h1 className="font-display" style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>New Workout</h1>
             </div>
 
-            {/* Meta info card */}
             <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div>
                     <label style={labelStyle}>Workout Name</label>
@@ -70,15 +84,13 @@ export default function NewWorkout() {
                 </div>
             </div>
 
-            {/* Exercises */}
             <div>
                 <h2 className="font-display" style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 0.75rem' }}>Exercises</h2>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                     {exercises.map((ex, idx) => {
-                        const filtered = libraryNames.filter(n => n.toLowerCase().includes(ex.name.toLowerCase())).slice(0, 8);
+                        const filtered = EXERCISE_NAMES.filter(n => n.toLowerCase().includes(ex.name.toLowerCase())).slice(0, 8);
                         return (
                             <div key={idx} className="card" style={{ padding: '1rem' }}>
-                                {/* Name input with dropdown */}
                                 <div style={{ position: 'relative', marginBottom: '0.75rem', display: 'flex', gap: '0.5rem' }}>
                                     <div style={{ flex: 1, position: 'relative' }}>
                                         <input className="input" placeholder="Exercise name"
@@ -114,7 +126,6 @@ export default function NewWorkout() {
                                         </button>
                                     )}
                                 </div>
-                                {/* Set/Rep/Weight */}
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
                                     {fieldConfig.map(({ key, label }) => (
                                         <div key={key}>
@@ -137,7 +148,6 @@ export default function NewWorkout() {
                 </div>
             </div>
 
-            {/* Notes */}
             <div className="card" style={{ padding: '1.25rem' }}>
                 <label style={labelStyle}>Session Notes</label>
                 <textarea className="input" placeholder="How did it feel? Any PRs?" value={notes} onChange={e => setNotes(e.target.value)} rows={3} style={{ resize: 'none' }} />

@@ -1,18 +1,32 @@
 import { useState, useEffect } from 'react';
 import { TrendingUp, Award, BarChart2, Zap } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
-import api from '../lib/api';
+import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { useAuth } from '../context/AuthContext';
 
-interface Workout { _id: string; name: string; date: string; exercises: { name: string; sets: number; reps: number; weight: number }[]; durationMinutes?: number; }
+interface Workout { id: string; name: string; date: string; exercises: { name: string; sets: number; reps: number; weight: number }[]; durationMinutes?: number; }
 
 const tooltipStyle = { backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12, color: 'var(--text-primary)' };
 const tickStyle = { fill: '#3d4a66', fontSize: 11 };
 
 export default function Progress() {
+    const { user } = useAuth();
     const [workouts, setWorkouts] = useState<Workout[]>([]);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => { api.get('/api/workouts').then(r => setWorkouts(r.data)).catch(console.error).finally(() => setLoading(false)); }, []);
+    useEffect(() => {
+        if (!user) return;
+        const q = query(
+            collection(db, 'workouts'),
+            where('userId', '==', user.id),
+            orderBy('date', 'desc')
+        );
+        getDocs(q)
+            .then(snap => setWorkouts(snap.docs.map(d => ({ id: d.id, ...d.data() } as Workout))))
+            .catch(console.error)
+            .finally(() => setLoading(false));
+    }, [user]);
 
     const last7 = Array.from({ length: 7 }, (_, i) => {
         const d = new Date(); d.setDate(d.getDate() - (6 - i));
@@ -69,7 +83,6 @@ export default function Progress() {
                 <TrendingUp size={20} style={{ color: 'var(--accent)' }} /> Progress
             </h1>
 
-            {/* Summary stats */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
                 {[
                     { label: 'Sessions', value: workouts.length },
@@ -80,7 +93,6 @@ export default function Progress() {
                 ))}
             </div>
 
-            {/* Weekly sessions bar chart */}
             <div className="card" style={{ padding: '1.25rem' }}>
                 {sectionHead(BarChart2, 'This Week')}
                 <ResponsiveContainer width="100%" height={130}>
@@ -99,7 +111,6 @@ export default function Progress() {
                 </ResponsiveContainer>
             </div>
 
-            {/* Volume trend */}
             {weeklyVolume.length > 1 && (
                 <div className="card" style={{ padding: '1.25rem' }}>
                     {sectionHead(TrendingUp, 'Weekly Volume')}
@@ -115,7 +126,6 @@ export default function Progress() {
                 </div>
             )}
 
-            {/* Personal records */}
             {prs.length > 0 && (
                 <div className="card" style={{ padding: '1.25rem' }}>
                     {sectionHead(Award, 'Personal Records')}
@@ -133,7 +143,6 @@ export default function Progress() {
                 </div>
             )}
 
-            {/* Streak hint */}
             <div className="card-accent" style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <Zap size={18} style={{ color: 'var(--accent)', flexShrink: 0 }} />
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>

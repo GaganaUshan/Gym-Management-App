@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Dumbbell, LogOut, CheckCircle, User, Star } from 'lucide-react';
+import { doc, setDoc } from 'firebase/firestore';
+import { updateProfile } from 'firebase/auth';
+import { auth, db } from '../lib/firebase';
 
 const GOALS = ['Build Muscle', 'Lose Fat', 'Increase Strength', 'General Fitness', 'Improve Endurance'];
 
@@ -11,9 +14,24 @@ export default function Profile() {
     const [displayName, setDisplayName] = useState(user?.name || '');
     const [goal, setGoal] = useState('Build Muscle');
     const [saved, setSaved] = useState(false);
+    const [saving, setSaving] = useState(false);
 
-    const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 2000); };
-    const handleLogout = () => { logout(); navigate('/'); };
+    const handleSave = async () => {
+        if (!user || !auth.currentUser) return;
+        setSaving(true);
+        try {
+            await updateProfile(auth.currentUser, { displayName });
+            await setDoc(doc(db, 'users', user.id), { name: displayName, goal }, { merge: true });
+            setSaved(true);
+            setTimeout(() => setSaved(false), 2000);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleLogout = async () => { await logout(); navigate('/'); };
 
     const labelStyle = { color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.06em', display: 'block', marginBottom: 6 };
 
@@ -81,7 +99,7 @@ export default function Profile() {
                     </div>
                 </div>
 
-                <button onClick={handleSave} className={saved ? '' : 'btn-primary'}
+                <button onClick={handleSave} disabled={saving} className={saved ? '' : 'btn-primary'}
                     style={saved ? {
                         width: '100%', padding: '0.75rem', borderRadius: 10, background: 'rgba(16,185,129,0.15)',
                         border: '1px solid rgba(16,185,129,0.3)', color: 'var(--success)', fontWeight: 600, fontSize: '0.875rem',
@@ -89,7 +107,7 @@ export default function Profile() {
                     } : {
                         width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
                     }}>
-                    {saved ? <><CheckCircle size={15} /> Changes Saved</> : <><Dumbbell size={15} /> Save Changes</>}
+                    {saved ? <><CheckCircle size={15} /> Changes Saved</> : <><Dumbbell size={15} /> {saving ? 'Saving...' : 'Save Changes'}</>}
                 </button>
             </div>
 

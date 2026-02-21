@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Flame, Plus, TrendingUp, Calendar, Zap, ChevronRight } from 'lucide-react';
-import api from '../lib/api';
+import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 interface Workout {
-    _id: string;
+    id: string;
     name: string;
     date: string;
     exercises: { name: string; sets: number; reps: number; weight: number }[];
@@ -19,8 +20,18 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        api.get('/api/workouts').then(r => setRecentWorkouts(r.data.slice(0, 3))).catch(console.error).finally(() => setLoading(false));
-    }, []);
+        if (!user) return;
+        const q = query(
+            collection(db, 'workouts'),
+            where('userId', '==', user.id),
+            orderBy('date', 'desc'),
+            limit(3)
+        );
+        getDocs(q)
+            .then(snap => setRecentWorkouts(snap.docs.map(d => ({ id: d.id, ...d.data() } as Workout))))
+            .catch(console.error)
+            .finally(() => setLoading(false));
+    }, [user]);
 
     const hour = new Date().getHours();
     const greeting = hour < 12 ? '🌅 Good morning' : hour < 18 ? '☀️ Good afternoon' : '🌙 Good evening';
@@ -37,7 +48,6 @@ export default function Dashboard() {
                 position: 'relative',
                 overflow: 'hidden',
             }}>
-                {/* Inner glow */}
                 <div style={{
                     position: 'absolute', top: -40, right: -40,
                     width: 200, height: 200, borderRadius: '50%',
@@ -103,7 +113,7 @@ export default function Dashboard() {
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                         {recentWorkouts.map((w, idx) => (
-                            <div key={w._id} className="card card-hover"
+                            <div key={w.id} className="card card-hover"
                                 style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', animation: `float-up 0.3s ease ${idx * 0.06}s both` }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
                                     <div style={{

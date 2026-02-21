@@ -1,25 +1,40 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Dumbbell, Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
-import api from '../lib/api';
+import { collection, query, where, orderBy, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { useAuth } from '../context/AuthContext';
 
 interface Exercise { name: string; sets: number; reps: number; weight: number; }
-interface Workout { _id: string; name: string; date: string; exercises: Exercise[]; durationMinutes?: number; notes?: string; }
+interface Workout { id: string; name: string; date: string; exercises: Exercise[]; durationMinutes?: number; notes?: string; }
 
 export default function WorkoutLog() {
     const [workouts, setWorkouts] = useState<Workout[]>([]);
     const [loading, setLoading] = useState(true);
     const [expanded, setExpanded] = useState<string | null>(null);
     const navigate = useNavigate();
+    const { user } = useAuth();
 
     useEffect(() => {
-        api.get('/api/workouts').then(r => setWorkouts(r.data)).catch(console.error).finally(() => setLoading(false));
-    }, []);
+        if (!user) return;
+        const q = query(
+            collection(db, 'workouts'),
+            where('userId', '==', user.id),
+            orderBy('date', 'desc')
+        );
+        getDocs(q)
+            .then(snap => {
+                const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as Workout));
+                setWorkouts(data);
+            })
+            .catch(console.error)
+            .finally(() => setLoading(false));
+    }, [user]);
 
     const deleteWorkout = async (id: string) => {
         if (!confirm('Delete this workout?')) return;
-        await api.delete(`/api/workouts/${id}`);
-        setWorkouts(prev => prev.filter(w => w._id !== id));
+        await deleteDoc(doc(db, 'workouts', id));
+        setWorkouts(prev => prev.filter(w => w.id !== id));
     };
 
     return (
@@ -49,9 +64,8 @@ export default function WorkoutLog() {
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                     {workouts.map((w, idx) => (
-                        <div key={w._id} className="card" style={{ overflow: 'hidden', animation: `float-up 0.3s ease ${idx * 0.04}s both` }}>
-                            {/* Header row */}
-                            <div onClick={() => setExpanded(expanded === w._id ? null : w._id)}
+                        <div key={w.id} className="card" style={{ overflow: 'hidden', animation: `float-up 0.3s ease ${idx * 0.04}s both` }}>
+                            <div onClick={() => setExpanded(expanded === w.id ? null : w.id)}
                                 style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
                                     <div style={{
@@ -71,18 +85,17 @@ export default function WorkoutLog() {
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                     <span className="badge badge-blue">{w.exercises.length} ex</span>
-                                    <button onClick={e => { e.stopPropagation(); deleteWorkout(w._id); }}
+                                    <button onClick={e => { e.stopPropagation(); deleteWorkout(w.id); }}
                                         style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, borderRadius: 6, display: 'flex', transition: 'color 0.2s' }}
                                         onMouseEnter={e => (e.currentTarget.style.color = 'var(--danger)')}
                                         onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
                                         <Trash2 size={15} />
                                     </button>
-                                    {expanded === w._id ? <ChevronUp size={15} style={{ color: 'var(--text-muted)' }} /> : <ChevronDown size={15} style={{ color: 'var(--text-muted)' }} />}
+                                    {expanded === w.id ? <ChevronUp size={15} style={{ color: 'var(--text-muted)' }} /> : <ChevronDown size={15} style={{ color: 'var(--text-muted)' }} />}
                                 </div>
                             </div>
 
-                            {/* Expanded detail */}
-                            {expanded === w._id && (
+                            {expanded === w.id && (
                                 <div style={{ borderTop: '1px solid var(--border)', padding: '1rem 1.25rem' }}>
                                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                         <thead>

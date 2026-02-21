@@ -1,5 +1,14 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import api from '../lib/api';
+import {
+    signInWithEmailAndPassword,
+    createUserWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged,
+    updateProfile,
+    type User as FirebaseUser,
+} from 'firebase/auth';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../lib/firebase';
 
 interface User {
     id: string;
@@ -9,53 +18,55 @@ interface User {
 
 interface AuthContextType {
     user: User | null;
-    token: string | null;
     loading: boolean;
     login: (email: string, password: string) => Promise<void>;
     register: (name: string, email: string, password: string) => Promise<void>;
-    logout: () => void;
+    logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+function mapFirebaseUser(fbUser: FirebaseUser): User {
+    return {
+        id: fbUser.uid,
+        name: fbUser.displayName || 'Athlete',
+        email: fbUser.email || '',
+    };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
-    const [token, setToken] = useState<string | null>(localStorage.getItem('hp_token'));
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const storedUser = localStorage.getItem('hp_user');
-        if (storedUser && token) {
-            setUser(JSON.parse(storedUser));
-        }
-        setLoading(false);
-    }, [token]);
+        const unsub = onAuthStateChanged(auth, (fbUser) => {
+            setUser(fbUser ? mapFirebaseUser(fbUser) : null);
+            setLoading(false);
+        });
+        return unsub;
+    }, []);
 
     const login = async (email: string, password: string) => {
-        const { data } = await api.post('/api/auth/login', { email, password });
-        localStorage.setItem('hp_token', data.token);
-        localStorage.setItem('hp_user', JSON.stringify(data.user));
-        setToken(data.token);
-        setUser(data.user);
+        await signInWithEmailAndPassword(auth, email, password);
     };
 
     const register = async (name: string, email: string, password: string) => {
-        const { data } = await api.post('/api/auth/register', { name, email, password });
-        localStorage.setItem('hp_token', data.token);
-        localStorage.setItem('hp_user', JSON.stringify(data.user));
-        setToken(data.token);
-        setUser(data.user);
+        const { user: fbUser } = await createUserWithEmailAndPassword(auth, email, password);
+        await updateProfile(fbUser, { displayName: name });
+        // Create user document in Firestore for profile data
+        await setDoc(doc(db, 'users', fbUser.uid), {
+            name,
+            email,
+            createdAt: new Date().toISOString(),
+        });
     };
 
-    const logout = () => {
-        localStorage.removeItem('hp_token');
-        localStorage.removeItem('hp_user');
-        setToken(null);
-        setUser(null);
+    const logout = async () => {
+        await signOut(auth);
     };
 
     return (
-        <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+        <AuthContext.Provider value={{ user, loading, login, register, logout }}>
             {children}
         </AuthContext.Provider>
     );
